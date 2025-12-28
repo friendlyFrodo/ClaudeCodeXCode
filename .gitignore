@@ -17,3 +17,6 @@ DerivedData/
 .idea/
 *.swp
 *~
+
+# Local design document (source of truth, not versioned)
+DESIGN.md
