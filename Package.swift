@@ -20,10 +20,7 @@ let package = Package(
                 "SwiftTerm",
                 "HotKey"
             ],
-            path: "Sources/ClaudeCodeXCode",
-            resources: [
-                .process("Resources")
-            ]
+            path: "Sources/ClaudeCodeXCode"
         )
     ]
 )
