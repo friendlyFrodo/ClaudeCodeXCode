@@ -184,11 +184,13 @@ actor HaikuClient {
           "whisper": "Your casual observation" | null,
           "can_apply": true | false,
           "patch": {
-            "file": "/full/path/to/file.swift",
+            "file": "\(context.currentFile ?? "/full/path/to/file.swift")",
             "old": "exact original code",
             "new": "suggested replacement"
           } | null
         }
+
+        IMPORTANT: Use the EXACT file path shown above. Do NOT use relative paths or just filenames.
         """)
 
         return parts.joined(separator: "\n")

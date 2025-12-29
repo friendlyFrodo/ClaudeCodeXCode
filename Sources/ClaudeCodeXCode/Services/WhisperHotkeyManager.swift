@@ -25,9 +25,9 @@ final class WhisperHotkeyManager {
 
     // MARK: - Hotkeys
 
-    private var applyHotkey: HotKey?       // ⌘Y - Apply whisper
-    private var expandHotkey: HotKey?      // ⌘? (⌘⇧/) - Tell me more
-    private var dismissHotkey: HotKey?     // ⌘N - Dismiss whisper
+    private var applyHotkey: HotKey?       // F1 - Apply whisper
+    private var expandHotkey: HotKey?      // F2 - Tell me more
+    private var dismissHotkey: HotKey?     // F3 - Dismiss whisper
 
     // MARK: - State
 
@@ -64,7 +64,7 @@ final class WhisperHotkeyManager {
         setupExpandHotkey()
         setupDismissHotkey()
 
-        print("[WhisperHotkeyManager] Hotkeys registered: ⌘Y (apply), ⌘⇧/ (expand), ⌘N (dismiss)")
+        print("[WhisperHotkeyManager] Hotkeys registered: F1 (apply), F2 (expand), F3 (dismiss)")
     }
 
     /// Tear down all hotkeys
@@ -78,36 +78,46 @@ final class WhisperHotkeyManager {
     // MARK: - Individual Hotkey Setup
 
     private func setupApplyHotkey() {
-        // ⌘Y - Apply whisper patch
-        applyHotkey = HotKey(key: .y, modifiers: [.command])
+        // F1 - Apply whisper patch
+        applyHotkey = HotKey(key: .f1, modifiers: [])
         applyHotkey?.keyDownHandler = { [weak self] in
-            guard let self = self, self.hasActiveWhisper else { return }
+            print("[WhisperHotkeyManager] F1 pressed, hasActiveWhisper: \(self?.hasActiveWhisper ?? false)")
+            guard let self = self, self.hasActiveWhisper else {
+                print("[WhisperHotkeyManager] F1 ignored - no active whisper")
+                return
+            }
 
-            print("[WhisperHotkeyManager] ⌘Y pressed - applying whisper")
+            print("[WhisperHotkeyManager] F1 - applying whisper")
             NotificationCenter.default.post(name: .whisperHotkeyApply, object: nil)
         }
     }
 
     private func setupExpandHotkey() {
-        // ⌘⇧/ (⌘?) - Tell me more
-        expandHotkey = HotKey(key: .slash, modifiers: [.command, .shift])
+        // F2 - Tell me more
+        expandHotkey = HotKey(key: .f2, modifiers: [])
         expandHotkey?.keyDownHandler = { [weak self] in
-            guard let self = self, self.hasActiveWhisper else { return }
+            print("[WhisperHotkeyManager] F2 pressed, hasActiveWhisper: \(self?.hasActiveWhisper ?? false)")
+            guard let self = self, self.hasActiveWhisper else {
+                print("[WhisperHotkeyManager] F2 ignored - no active whisper")
+                return
+            }
 
-            print("[WhisperHotkeyManager] ⌘? pressed - expanding whisper")
+            print("[WhisperHotkeyManager] F2 - expanding whisper")
             NotificationCenter.default.post(name: .whisperHotkeyExpand, object: nil)
         }
     }
 
     private func setupDismissHotkey() {
-        // ⌘N - Dismiss whisper
-        // Note: This might conflict with "New" in some apps
-        // We only activate it when there's an active whisper
-        dismissHotkey = HotKey(key: .n, modifiers: [.command])
+        // F3 - Dismiss whisper
+        dismissHotkey = HotKey(key: .f3, modifiers: [])
         dismissHotkey?.keyDownHandler = { [weak self] in
-            guard let self = self, self.hasActiveWhisper else { return }
+            print("[WhisperHotkeyManager] F3 pressed, hasActiveWhisper: \(self?.hasActiveWhisper ?? false)")
+            guard let self = self, self.hasActiveWhisper else {
+                print("[WhisperHotkeyManager] F3 ignored - no active whisper")
+                return
+            }
 
-            print("[WhisperHotkeyManager] ⌘N pressed - dismissing whisper")
+            print("[WhisperHotkeyManager] F3 - dismissing whisper")
             NotificationCenter.default.post(name: .whisperHotkeyDismiss, object: nil)
         }
     }

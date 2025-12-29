@@ -16,6 +16,10 @@ struct ClaudeCodeXCodeApp: App {
 class AppDelegate: NSObject, NSApplicationDelegate {
     var floatingPanel: FloatingPanel?
     var settingsWindow: NSWindow?
+    private var xcodeVisibilityObserver: XcodeVisibilityObserver?
+
+    /// Track if panel was manually hidden (vs auto-hidden due to Xcode)
+    private var panelManuallyHidden = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Set up global hotkeys for whisper actions
@@ -28,8 +32,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         floatingPanel = FloatingPanel()
         floatingPanel?.show()
 
+        // Set up Xcode visibility observer to show/hide panel with Xcode
+        setupXcodeVisibilityObserver()
+
         // Hide dock icon (optional - comment out if you want dock presence)
         // NSApp.setActivationPolicy(.accessory)
+    }
+
+    private func setupXcodeVisibilityObserver() {
+        xcodeVisibilityObserver = XcodeVisibilityObserver()
+        xcodeVisibilityObserver?.onVisibilityChanged = { [weak self] isVisible in
+            guard let self = self, let panel = self.floatingPanel, !self.panelManuallyHidden else { return }
+
+            if isVisible {
+                // Restore from dock with animation
+                panel.deminiaturize(nil)
+            } else {
+                // Minimize to dock with animation (genie/scale effect)
+                panel.miniaturize(nil)
+            }
+        }
+        xcodeVisibilityObserver?.start()
     }
 
     private func setupMenu() {
@@ -74,6 +97,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Clean up observers
+        xcodeVisibilityObserver?.stop()
+
         // Clean up hotkeys
         WhisperHotkeyManager.shared.tearDown()
     }

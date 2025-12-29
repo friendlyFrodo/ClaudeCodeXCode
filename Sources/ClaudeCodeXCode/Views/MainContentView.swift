@@ -8,32 +8,38 @@ struct MainContentView: View {
     @StateObject private var whisperService = WhisperService()
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Context bar showing files Claude is watching
-            ContextBar(
-                contextTracker: whisperService.contextTracker,
-                isProcessing: whisperService.isProcessing
-            )
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                // Context bar showing files Claude is watching
+                ContextBar(
+                    contextTracker: whisperService.contextTracker,
+                    isProcessing: whisperService.isProcessing
+                )
 
-            Divider()
+                Divider()
 
-            // Main terminal view
-            TerminalContainerView(
-                workingDirectory: claudeService.workingDirectory,
-                theme: themeReader.currentTheme,
-                onProcessTerminated: { exitCode in
-                    claudeService.handleProcessTerminated(exitCode: exitCode)
-                }
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Main terminal view
+                TerminalContainerView(
+                    workingDirectory: claudeService.workingDirectory,
+                    theme: themeReader.currentTheme,
+                    onProcessTerminated: { exitCode in
+                        claudeService.handleProcessTerminated(exitCode: exitCode)
+                    }
+                )
+                .frame(
+                    width: geometry.size.width,
+                    height: calculateTerminalHeight(totalHeight: geometry.size.height)
+                )
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: whisperService.currentWhisper?.id)
 
-            // Whisper bubble (appears when there's a whisper)
-            WhisperContainer(
-                whisper: whisperService.currentWhisper,
-                onApply: { whisperService.applyWhisper() },
-                onExpand: { whisperService.expandWhisper() },
-                onDismiss: { whisperService.dismissWhisper() }
-            )
+                // Whisper bubble (appears when there's a whisper)
+                WhisperContainer(
+                    whisper: whisperService.currentWhisper,
+                    onApply: { whisperService.applyWhisper() },
+                    onExpand: { whisperService.expandWhisper() },
+                    onDismiss: { whisperService.dismissWhisper() }
+                )
+            }
         }
         .onAppear {
             claudeService.handleProcessStarted()
@@ -61,18 +67,26 @@ struct MainContentView: View {
         }
     }
 
+    /// Calculate terminal height based on available space and whisper presence
+    private func calculateTerminalHeight(totalHeight: CGFloat) -> CGFloat {
+        let contextBarHeight: CGFloat = 28
+        let dividerHeight: CGFloat = 1
+        let whisperHeight: CGFloat = whisperService.currentWhisper != nil ? 100 : 0
+
+        let terminalHeight = totalHeight - contextBarHeight - dividerHeight - whisperHeight
+        return max(terminalHeight, 200) // Minimum 200px for terminal
+    }
+
     /// Handle the "Tell me more" action by injecting a prompt into the terminal
     private func handleExpandWhisper(_ notification: Notification) {
         guard let message = notification.userInfo?["message"] as? String else { return }
 
-        // The prompt to inject
-        let prompt = "Tell me more about: \"\(message)\""
-
-        // Post notification for terminal to handle
+        // The message already contains the full prompt with context from WhisperService
+        // Post notification for terminal to handle (terminal will auto-submit with newline)
         NotificationCenter.default.post(
             name: .injectTerminalInput,
             object: nil,
-            userInfo: ["input": prompt]
+            userInfo: ["input": message]
         )
     }
 }
@@ -137,15 +151,26 @@ struct TerminalContainerView: View {
         terminal.needsDisplay = true
     }
 
-    /// Inject text input into the terminal
+    /// Inject text input into the terminal and submit it
     private func injectInput(_ text: String, into terminal: SwiftTerm.LocalProcessTerminalView) {
-        // Send the text followed by newline
-        let inputWithNewline = text + "\n"
-        let bytes = Array(inputWithNewline.utf8)
-        terminal.send(data: bytes[...])
+        print("[TerminalContainer] Injecting input (\(text.count) chars)")
+        print("[TerminalContainer] Preview: \(text.prefix(100))...")
 
         // Make sure terminal has focus
         terminal.window?.makeFirstResponder(terminal)
+
+        // Send the text first
+        let textBytes = Array(text.utf8)
+        terminal.send(data: textBytes[...])
+        print("[TerminalContainer] Sent \(textBytes.count) bytes of text")
+
+        // Small delay to let Claude Code's TUI process the text input
+        // Then send Enter (carriage return = 13) separately
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            // Send CR (Enter key) - same as EscapeSequences.cmdRet in SwiftTerm
+            terminal.send([13])
+            print("[TerminalContainer] Sent CR (Enter)")
+        }
     }
 }
 

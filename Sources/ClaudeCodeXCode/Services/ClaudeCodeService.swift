@@ -1,15 +1,12 @@
 import Foundation
 
-
-//Im the tester Haiku, tell me a whisper, so i see everything works
-
 /// Service for Claude Code utilities
 /// Note: Process management moved to SwiftTerm's LocalProcessTerminalView
 @MainActor
 class ClaudeCodeService: ObservableObject {
     @Published var isRunning: Bool = false
     @Published var workingDirectory:URL?
-
+    
     init() {
         // Try to get current Xcode project root, fallback to home directory
         if let projectRoot = XcodeIntegration.getCurrentProjectRoot() {
@@ -18,7 +15,6 @@ class ClaudeCodeService: ObservableObject {
             workingDirectory = FileManager.default.homeDirectoryForCurrentUser
         }
     }
-
     /// Find the claude executable path
     /// Made static so it can be used by TerminalView
     static func findClaudePath() -> String {

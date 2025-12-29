@@ -12,6 +12,7 @@ class FloatingPanel: NSPanel {
             styleMask: [
                 .titled,
                 .closable,
+                .miniaturizable,
                 .resizable,
                 .nonactivatingPanel,
                 .fullSizeContentView

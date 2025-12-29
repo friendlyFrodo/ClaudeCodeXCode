@@ -39,7 +39,7 @@ struct WhisperBubble: View {
                 if whisper.canApply {
                     WhisperActionButton(
                         label: "Apply",
-                        shortcut: "⌘Y",
+                        shortcut: "F1",
                         isPrimary: true,
                         action: onApply
                     )
@@ -47,14 +47,14 @@ struct WhisperBubble: View {
 
                 WhisperActionButton(
                     label: "Tell me more",
-                    shortcut: "⌘?",
+                    shortcut: "F2",
                     isPrimary: !whisper.canApply,
                     action: onExpand
                 )
 
                 WhisperActionButton(
                     label: "Dismiss",
-                    shortcut: "⌘N",
+                    shortcut: "F3",
                     isPrimary: false,
                     action: onDismiss
                 )

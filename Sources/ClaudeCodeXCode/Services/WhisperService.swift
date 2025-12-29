@@ -121,10 +121,14 @@ final class WhisperService: ObservableObject {
         defer { isProcessing = false }
 
         print("[WhisperService] Calling Haiku API...")
+        print("[WhisperService] Context file: \(context.currentFile ?? "nil")")
 
         do {
             if let whisper = try await haikuClient.getWhisper(context: context) {
                 print("[WhisperService] Got whisper: \(whisper.message)")
+                if let patch = whisper.patch {
+                    print("[WhisperService] Patch included: file=\(patch.filePath)")
+                }
                 showWhisper(whisper)
                 rateLimiter.didWhisper()
             } else {
@@ -181,6 +185,11 @@ final class WhisperService: ObservableObject {
             return
         }
 
+        print("[WhisperService] Attempting to apply patch:")
+        print("[WhisperService]   File: \(patch.filePath)")
+        print("[WhisperService]   Old code: \(patch.oldCode.prefix(100))...")
+        print("[WhisperService]   New code: \(patch.newCode.prefix(100))...")
+
         let result = CodePatcher.apply(patch)
 
         switch result {
@@ -188,7 +197,8 @@ final class WhisperService: ObservableObject {
             print("[WhisperService] Patch applied successfully")
             // TODO: Play success sound or show brief confirmation
         case .fileNotFound:
-            print("[WhisperService] Patch failed: file not found")
+            print("[WhisperService] Patch failed: file not found at '\(patch.filePath)'")
+            print("[WhisperService] File exists: \(FileManager.default.fileExists(atPath: patch.filePath))")
         case .codeNotFound:
             print("[WhisperService] Patch failed: code not found (file may have changed)")
         case .writeError(let error):
@@ -198,18 +208,37 @@ final class WhisperService: ObservableObject {
         dismissWhisper()
     }
 
-    /// Expand the current whisper (tell me more) (⌘?)
+    /// Expand the current whisper (tell me more) (F2)
     func expandWhisper() {
         guard let whisper = currentWhisper else { return }
+
+        // Build a detailed prompt with context (no redundant "Tell me more")
+        var prompt = "\"\(whisper.message)\""
+
+        // Add file context if available
+        if let patch = whisper.patch {
+            let fileName = (patch.filePath as NSString).lastPathComponent
+            prompt += "\n\nFile: \(fileName)"
+
+            // Add code context
+            if !patch.oldCode.isEmpty {
+                prompt += "\n\nCode:\n\(patch.oldCode)"
+            }
+        } else if let currentFile = contextTracker.currentFile {
+            let fileName = (currentFile as NSString).lastPathComponent
+            prompt += "\n\nFile: \(fileName)"
+        }
+
+        prompt += "\n\nExplain this and suggest how to fix it."
 
         // Post notification for the terminal to pick up
         NotificationCenter.default.post(
             name: .expandWhisper,
             object: nil,
-            userInfo: ["message": whisper.message]
+            userInfo: ["message": prompt]
         )
 
-        print("[WhisperService] Expanding whisper: \(whisper.message)")
+        print("[WhisperService] Expanding whisper with context")
         dismissWhisper()
     }
 

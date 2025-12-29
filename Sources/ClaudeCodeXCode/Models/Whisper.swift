@@ -56,11 +56,27 @@ extension Whisper {
 
         var patch: WhisperPatch? = nil
         if let patchData = json["patch"] as? [String: String],
-           let filePath = patchData["file"] ?? currentFile,
            let oldCode = patchData["old"],
            let newCode = patchData["new"] {
+
+            // Resolve file path: if Haiku returns just a filename, use the full path from context
+            var filePath = patchData["file"] ?? currentFile
+
+            // If the returned path is just a filename (no directory separator), use currentFile
+            if let path = filePath, !path.contains("/"), let fullPath = currentFile {
+                print("[Whisper] Haiku returned relative path '\(path)', using full path: \(fullPath)")
+                filePath = fullPath
+            } else if let path = filePath {
+                print("[Whisper] Using file path from Haiku: \(path)")
+            }
+
+            guard let resolvedPath = filePath else {
+                print("[Whisper] No valid file path available")
+                return Whisper(message: message, canApply: false, patch: nil)
+            }
+
             patch = WhisperPatch(
-                filePath: filePath,
+                filePath: resolvedPath,
                 oldCode: oldCode,
                 newCode: newCode
             )
