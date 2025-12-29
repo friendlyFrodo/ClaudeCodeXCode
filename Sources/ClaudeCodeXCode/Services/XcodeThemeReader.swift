@@ -39,7 +39,6 @@ final class XcodeThemeReader: ObservableObject {
         let newTheme = loadCurrentTheme()
         if newTheme != currentTheme {
             currentTheme = newTheme
-            print("[XcodeThemeReader] Theme changed to: \(newTheme.name)")
             // Post notification for non-SwiftUI observers (like FloatingPanel)
             NotificationCenter.default.post(
                 name: .themeDidChange,
@@ -54,25 +53,16 @@ final class XcodeThemeReader: ObservableObject {
     /// Load the current theme based on system appearance and Xcode preferences
     private func loadCurrentTheme() -> Theme {
         let isDarkMode = isSystemDarkMode()
-        print("[XcodeThemeReader] System dark mode: \(isDarkMode)")
 
         // Try to get theme name from Xcode UserDefaults
         if let themeName = getXcodeThemeName(forDarkMode: isDarkMode) {
-            print("[XcodeThemeReader] Got theme name: \(themeName)")
             if let theme = loadTheme(named: themeName, isDark: isDarkMode) {
-                print("[XcodeThemeReader] Successfully loaded theme: \(theme.name), isDark: \(theme.isDark)")
                 return theme
-            } else {
-                print("[XcodeThemeReader] Failed to load theme file for: \(themeName)")
             }
-        } else {
-            print("[XcodeThemeReader] No Xcode theme name found in UserDefaults")
         }
 
         // Fallback to built-in theme
-        let fallback = isDarkMode ? Theme.xcodeDefaultDark : Theme.xcodeDefaultLight
-        print("[XcodeThemeReader] Using fallback theme: \(fallback.name)")
-        return fallback
+        return isDarkMode ? Theme.xcodeDefaultDark : Theme.xcodeDefaultLight
     }
 
     /// Check if we should use dark mode (checks Xcode's preference first, then system)
@@ -81,18 +71,14 @@ final class XcodeThemeReader: ObservableObject {
         // Values: 0 = System, 1 = Light, 2 = Dark
         if let xcodeDefaults = UserDefaults(suiteName: "com.apple.dt.Xcode") {
             let ideAppearance = xcodeDefaults.integer(forKey: "IDEAppearance")
-            print("[XcodeThemeReader] Xcode IDEAppearance: \(ideAppearance) (0=System, 1=Light, 2=Dark)")
 
             switch ideAppearance {
             case 1:
-                print("[XcodeThemeReader] Xcode set to Light mode")
                 return false
             case 2:
-                print("[XcodeThemeReader] Xcode set to Dark mode")
                 return true
             default:
                 // 0 or unset = follow system
-                print("[XcodeThemeReader] Xcode set to follow System")
                 break
             }
         }
@@ -100,43 +86,27 @@ final class XcodeThemeReader: ObservableObject {
         // Fall back to system appearance
         let appearance = NSApp.effectiveAppearance
         let match = appearance.bestMatch(from: [.darkAqua, .aqua])
-        let isDark = match == .darkAqua
-        print("[XcodeThemeReader] System appearance: \(appearance.name.rawValue), isDark: \(isDark)")
-        return isDark
+        return match == .darkAqua
     }
 
     /// Get the current theme name from Xcode's UserDefaults
     private func getXcodeThemeName(forDarkMode isDark: Bool) -> String? {
         // Xcode stores preferences in com.apple.dt.Xcode domain
         guard let defaults = UserDefaults(suiteName: "com.apple.dt.Xcode") else {
-            print("[XcodeThemeReader] Could not access Xcode UserDefaults")
             return nil
         }
 
         // Keys for dark/light mode themes
         let key = isDark ? "XCFontAndColorCurrentDarkTheme" : "XCFontAndColorCurrentTheme"
-        print("[XcodeThemeReader] Looking for key: \(key)")
 
         if let themeName = defaults.string(forKey: key) {
-            print("[XcodeThemeReader] Found Xcode theme preference: \(themeName)")
             return themeName
         }
 
         // Try alternate key format
         let altKey = isDark ? "DVTFontAndColorCurrentDarkTheme" : "DVTFontAndColorCurrentTheme"
-        print("[XcodeThemeReader] Trying alternate key: \(altKey)")
         if let themeName = defaults.string(forKey: altKey) {
-            print("[XcodeThemeReader] Found Xcode theme preference (alt): \(themeName)")
             return themeName
-        }
-
-        // Debug: dump all keys containing "Theme" or "Font"
-        print("[XcodeThemeReader] Dumping Xcode UserDefaults keys containing Theme/Font/Color:")
-        let dict = defaults.dictionaryRepresentation()
-        for (key, value) in dict {
-            if key.contains("Theme") || key.contains("Font") || key.contains("Color") {
-                print("  \(key): \(value)")
-            }
         }
 
         return nil
@@ -150,7 +120,6 @@ final class XcodeThemeReader: ObservableObject {
         let themeURL = URL(fileURLWithPath: themePath)
 
         guard FileManager.default.fileExists(atPath: themePath) else {
-            print("[XcodeThemeReader] Theme file not found: \(themePath)")
             return nil
         }
 
@@ -164,7 +133,6 @@ final class XcodeThemeReader: ObservableObject {
         guard let data = try? Data(contentsOf: url),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
         else {
-            print("[XcodeThemeReader] Failed to parse theme file: \(url.path)")
             return nil
         }
 
@@ -248,14 +216,12 @@ final class XcodeThemeReader: ObservableObject {
         themeWatcher?.start()
 
         // Watch for system dark/light mode changes via DistributedNotificationCenter
-        // This is the proper way to detect appearance changes
         appearanceObserver = DistributedNotificationCenter.default().addObserver(
             forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"),
             object: nil,
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                // Small delay to let the system finish updating
                 try? await Task.sleep(nanoseconds: 100_000_000)  // 0.1 seconds
                 self?.reloadTheme()
             }
@@ -289,14 +255,10 @@ final class XcodeThemeReader: ObservableObject {
                 self?.reloadTheme()
             }
         }
-
-        print("[XcodeThemeReader] Started watching for theme changes")
     }
 
     /// Stop watching for theme changes
     nonisolated func stopWatching() {
-        // Note: This is nonisolated to allow cleanup from various contexts
-        // The actual cleanup of MainActor properties happens via Task
         Task { @MainActor [weak self] in
             self?.performStopWatching()
         }
@@ -324,7 +286,5 @@ final class XcodeThemeReader: ObservableObject {
             DistributedNotificationCenter.default().removeObserver(observer)
             xcodePrefsObserver = nil
         }
-
-        print("[XcodeThemeReader] Stopped watching for theme changes")
     }
 }

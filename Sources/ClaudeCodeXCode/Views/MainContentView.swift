@@ -1,28 +1,90 @@
 import SwiftUI
 import SwiftTerm
 
-/// Main content view with full terminal interface
+/// Main content view with full terminal interface and AI pair programmer features
 struct MainContentView: View {
     @StateObject private var claudeService = ClaudeCodeService()
     @StateObject private var themeReader = XcodeThemeReader()
+    @StateObject private var whisperService = WhisperService()
 
     var body: some View {
-        // Full terminal view filling entire window
-        TerminalContainerView(
-            workingDirectory: claudeService.workingDirectory,
-            theme: themeReader.currentTheme,
-            onProcessTerminated: { exitCode in
-                claudeService.handleProcessTerminated(exitCode: exitCode)
-            }
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        VStack(spacing: 0) {
+            // Context bar showing files Claude is watching
+            ContextBar(
+                contextTracker: whisperService.contextTracker,
+                isProcessing: whisperService.isProcessing
+            )
+
+            Divider()
+
+            // Main terminal view
+            TerminalContainerView(
+                workingDirectory: claudeService.workingDirectory,
+                theme: themeReader.currentTheme,
+                onProcessTerminated: { exitCode in
+                    claudeService.handleProcessTerminated(exitCode: exitCode)
+                }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Whisper bubble (appears when there's a whisper)
+            WhisperContainer(
+                whisper: whisperService.currentWhisper,
+                onApply: { whisperService.applyWhisper() },
+                onExpand: { whisperService.expandWhisper() },
+                onDismiss: { whisperService.dismissWhisper() }
+            )
+        }
         .onAppear {
             claudeService.handleProcessStarted()
+            // Start whisper service with the project root
+            whisperService.start(projectRoot: claudeService.workingDirectory?.path)
+        }
+        .onDisappear {
+            whisperService.stop()
         }
         .background(VisualEffectBlur())
         .preferredColorScheme(themeReader.currentTheme.isDark ? .dark : .light)
+        // Handle expand whisper notification
+        .onReceive(NotificationCenter.default.publisher(for: .expandWhisper)) { notification in
+            handleExpandWhisper(notification)
+        }
+        // Handle global hotkey notifications
+        .onReceive(NotificationCenter.default.publisher(for: .whisperHotkeyApply)) { _ in
+            whisperService.applyWhisper()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .whisperHotkeyExpand)) { _ in
+            whisperService.expandWhisper()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .whisperHotkeyDismiss)) { _ in
+            whisperService.dismissWhisper()
+        }
+    }
+
+    /// Handle the "Tell me more" action by injecting a prompt into the terminal
+    private func handleExpandWhisper(_ notification: Notification) {
+        guard let message = notification.userInfo?["message"] as? String else { return }
+
+        // The prompt to inject
+        let prompt = "Tell me more about: \"\(message)\""
+
+        // Post notification for terminal to handle
+        NotificationCenter.default.post(
+            name: .injectTerminalInput,
+            object: nil,
+            userInfo: ["input": prompt]
+        )
     }
 }
+
+// MARK: - Notification Names
+
+extension Notification.Name {
+    /// Posted to inject input into the terminal
+    static let injectTerminalInput = Notification.Name("com.claudecodexcode.injectTerminalInput")
+}
+
+// MARK: - Terminal Container
 
 /// Container that manages terminal and theme updates without recreating the terminal
 struct TerminalContainerView: View {
@@ -47,6 +109,13 @@ struct TerminalContainerView: View {
                 applyThemeToTerminal(theme, terminal: terminal)
             }
         }
+        // Handle terminal input injection
+        .onReceive(NotificationCenter.default.publisher(for: .injectTerminalInput)) { notification in
+            if let input = notification.userInfo?["input"] as? String,
+               let terminal = terminalRef as? SwiftTerm.LocalProcessTerminalView {
+                injectInput(input, into: terminal)
+            }
+        }
     }
 
     private func applyThemeToTerminal(_ theme: Theme, terminal: SwiftTerm.LocalProcessTerminalView) {
@@ -67,7 +136,20 @@ struct TerminalContainerView: View {
         terminal.installColors(swiftTermColors)
         terminal.needsDisplay = true
     }
+
+    /// Inject text input into the terminal
+    private func injectInput(_ text: String, into terminal: SwiftTerm.LocalProcessTerminalView) {
+        // Send the text followed by newline
+        let inputWithNewline = text + "\n"
+        let bytes = Array(inputWithNewline.utf8)
+        terminal.send(data: bytes[...])
+
+        // Make sure terminal has focus
+        terminal.window?.makeFirstResponder(terminal)
+    }
 }
+
+// MARK: - Visual Effect Blur
 
 /// Visual effect blur background
 struct VisualEffectBlur: NSViewRepresentable {
@@ -81,6 +163,8 @@ struct VisualEffectBlur: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
+
+// MARK: - Preview
 
 #Preview {
     MainContentView()
