@@ -1,152 +1,31 @@
 import Foundation
-import Combine
 
-/// Service for managing Claude Code CLI process
+/// Service for Claude Code utilities
+/// Note: Process management moved to SwiftTerm's LocalProcessTerminalView
 @MainActor
 class ClaudeCodeService: ObservableObject {
-    @Published var messages: [ChatMessage] = []
-    @Published var rawOutput: String = ""
     @Published var isRunning: Bool = false
-
-    private var process: Process?
-    private var inputPipe: Pipe?
-    private var outputPipe: Pipe?
-    private var errorPipe: Pipe?
+    @Published var workingDirectory: URL?
 
     init() {
-        // Add welcome message
-        messages.append(ChatMessage(
-            content: "Welcome to Claude Code for Xcode! Type a message to get started.",
-            isUser: false
-        ))
-    }
-
-    /// Send a command to Claude Code
-    func send(_ command: String) {
-        // Add user message to chat
-        messages.append(ChatMessage(content: command, isUser: true))
-
-        // Append to raw output
-        rawOutput += "\n> \(command)\n"
-
-        // Start or send to process
-        if process == nil || !isRunning {
-            startProcess(with: command)
+        // Try to get current Xcode project root, fallback to home directory
+        if let projectRoot = XcodeIntegration.getCurrentProjectRoot() {
+            workingDirectory = projectRoot
         } else {
-            writeToProcess(command)
+            workingDirectory = FileManager.default.homeDirectoryForCurrentUser
         }
-    }
-
-    /// Start the Claude Code process
-    private func startProcess(with initialCommand: String? = nil) {
-        process = Process()
-        inputPipe = Pipe()
-        outputPipe = Pipe()
-        errorPipe = Pipe()
-
-        guard let process = process,
-              let inputPipe = inputPipe,
-              let outputPipe = outputPipe,
-              let errorPipe = errorPipe else { return }
-
-        // Find claude executable
-        let claudePath = findClaudePath()
-
-        process.executableURL = URL(fileURLWithPath: claudePath)
-        process.arguments = []
-        process.standardInput = inputPipe
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
-
-        // Set working directory to user's home or current project
-        process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
-
-        // Handle output
-        outputPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            if !data.isEmpty, let output = String(data: data, encoding: .utf8) {
-                Task { @MainActor in
-                    self?.handleOutput(output)
-                }
-            }
-        }
-
-        // Handle errors
-        errorPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            if !data.isEmpty, let output = String(data: data, encoding: .utf8) {
-                Task { @MainActor in
-                    self?.handleError(output)
-                }
-            }
-        }
-
-        // Handle termination
-        process.terminationHandler = { [weak self] _ in
-            Task { @MainActor in
-                self?.isRunning = false
-                self?.rawOutput += "\n[Process terminated]\n"
-            }
-        }
-
-        do {
-            try process.run()
-            isRunning = true
-            rawOutput += "[Claude Code started]\n"
-
-            // Send initial command if provided
-            if let command = initialCommand {
-                // Small delay to let process initialize
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                    self?.writeToProcess(command)
-                }
-            }
-        } catch {
-            handleError("Failed to start Claude Code: \(error.localizedDescription)")
-            messages.append(ChatMessage(
-                content: "Error: Could not start Claude Code. Make sure it's installed (`npm install -g @anthropic-ai/claude-code`).",
-                isUser: false
-            ))
-        }
-    }
-
-    /// Write input to the running process
-    private func writeToProcess(_ text: String) {
-        guard let inputPipe = inputPipe else { return }
-
-        let input = text + "\n"
-        if let data = input.data(using: .utf8) {
-            inputPipe.fileHandleForWriting.write(data)
-        }
-    }
-
-    /// Handle output from the process
-    private func handleOutput(_ output: String) {
-        rawOutput += output
-
-        // Parse output and add to messages if it looks like a response
-        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty && !trimmed.hasPrefix(">") {
-            // Simple heuristic: if output is substantial, add as AI message
-            if trimmed.count > 10 {
-                messages.append(ChatMessage(content: trimmed, isUser: false))
-            }
-        }
-    }
-
-    /// Handle error output
-    private func handleError(_ error: String) {
-        rawOutput += "[ERROR] \(error)"
     }
 
     /// Find the claude executable path
-    private func findClaudePath() -> String {
+    /// Made static so it can be used by TerminalView
+    static func findClaudePath() -> String {
         // Check common locations
         let possiblePaths = [
             "/usr/local/bin/claude",
             "/opt/homebrew/bin/claude",
             "\(NSHomeDirectory())/.npm-global/bin/claude",
-            "\(NSHomeDirectory())/node_modules/.bin/claude"
+            "\(NSHomeDirectory())/node_modules/.bin/claude",
+            "\(NSHomeDirectory())/.local/bin/claude"
         ]
 
         for path in possiblePaths {
@@ -180,13 +59,56 @@ class ClaudeCodeService: ObservableObject {
         return "/usr/local/bin/claude"
     }
 
-    /// Stop the running process
-    func stop() {
-        process?.terminate()
-        process = nil
-        inputPipe = nil
-        outputPipe = nil
-        errorPipe = nil
+    /// Check if Claude Code CLI is installed
+    static func isClaudeInstalled() -> Bool {
+        let path = findClaudePath()
+        return FileManager.default.fileExists(atPath: path)
+    }
+
+    /// Get Claude Code version if available
+    static func getClaudeVersion() -> String? {
+        let path = findClaudePath()
+        guard FileManager.default.fileExists(atPath: path) else { return nil }
+
+        let process = Process()
+        let pipe = Pipe()
+
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = ["--version"]
+        process.standardOutput = pipe
+        process.standardError = pipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let version = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !version.isEmpty {
+                return version
+            }
+        } catch {
+            return nil
+        }
+
+        return nil
+    }
+
+    /// Set working directory for Claude
+    func setWorkingDirectory(_ url: URL) {
+        workingDirectory = url
+    }
+
+    /// Process terminated handler
+    func handleProcessTerminated(exitCode: Int32?) {
         isRunning = false
+        if let code = exitCode, code != 0 {
+            print("Claude Code exited with code: \(code)")
+        }
+    }
+
+    /// Process started handler
+    func handleProcessStarted() {
+        isRunning = true
     }
 }

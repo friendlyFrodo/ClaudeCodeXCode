@@ -32,11 +32,18 @@ class FloatingPanel: NSPanel {
             .transient
         ]
 
-        // Visual appearance
+        // Xcode-like dark title bar appearance
+        appearance = NSAppearance(named: .darkAqua)
         isOpaque = false
-        backgroundColor = .clear
-        titlebarAppearsTransparent = true
-        titleVisibility = .hidden
+        backgroundColor = NSColor(red: 0.15, green: 0.15, blue: 0.15, alpha: 1.0)
+        titlebarAppearsTransparent = false
+        titleVisibility = .visible
+
+        // Style the title bar like Xcode
+        if let titlebarView = standardWindowButton(.closeButton)?.superview?.superview {
+            titlebarView.wantsLayer = true
+            titlebarView.layer?.backgroundColor = NSColor(red: 0.18, green: 0.18, blue: 0.18, alpha: 1.0).cgColor
+        }
 
         // Window behavior
         isMovableByWindowBackground = true
