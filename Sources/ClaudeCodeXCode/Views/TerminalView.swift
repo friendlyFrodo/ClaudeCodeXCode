@@ -7,6 +7,12 @@ struct ClaudeTerminalView: NSViewRepresentable {
     /// Working directory for the Claude process
     var workingDirectory: URL?
 
+    /// Theme to apply to the terminal
+    var theme: Theme = .xcodeDefaultDark
+
+    /// Binding to store reference to the terminal for direct updates
+    @Binding var terminalRef: AnyObject?
+
     /// Callback when process terminates
     var onProcessTerminated: ((Int32?) -> Void)?
 
@@ -20,9 +26,8 @@ struct ClaudeTerminalView: NSViewRepresentable {
         terminal.translatesAutoresizingMaskIntoConstraints = true
         terminal.autoresizingMask = [.width, .height]
 
-        // Configure terminal appearance
-        terminal.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        terminal.configureNativeColors()
+        // Apply theme colors and font
+        applyTheme(theme, to: terminal)
 
         // Set delegate for process lifecycle
         terminal.processDelegate = context.coordinator
@@ -30,8 +35,9 @@ struct ClaudeTerminalView: NSViewRepresentable {
         // Start Claude Code process
         startClaudeProcess(in: terminal)
 
-        // Make terminal focusable for keyboard input
+        // Store reference for direct theme updates
         DispatchQueue.main.async {
+            self.terminalRef = terminal
             terminal.window?.makeFirstResponder(terminal)
         }
 
@@ -39,6 +45,16 @@ struct ClaudeTerminalView: NSViewRepresentable {
     }
 
     func updateNSView(_ terminal: LocalProcessTerminalView, context: Context) {
+        // Check if theme changed and reapply
+        let currentThemeName = context.coordinator.currentTheme?.name ?? "nil"
+        let newThemeName = theme.name
+
+        if context.coordinator.currentTheme?.name != theme.name {
+            print("[TerminalView] Theme changed from '\(currentThemeName)' to '\(newThemeName)' - applying")
+            applyTheme(theme, to: terminal)
+            context.coordinator.currentTheme = theme
+        }
+
         // Ensure terminal stays as first responder for keyboard input
         if terminal.window?.firstResponder != terminal {
             terminal.window?.makeFirstResponder(terminal)
@@ -50,6 +66,34 @@ struct ClaudeTerminalView: NSViewRepresentable {
             onTerminated: onProcessTerminated,
             onTitleChanged: onTitleChanged
         )
+    }
+
+    /// Apply theme colors and font to the terminal
+    private func applyTheme(_ theme: Theme, to terminal: LocalProcessTerminalView) {
+        // Apply main colors
+        terminal.nativeBackgroundColor = theme.backgroundColor
+        terminal.nativeForegroundColor = theme.foregroundColor
+        terminal.caretColor = theme.cursorColor
+        terminal.selectedTextBackgroundColor = theme.selectionColor
+
+        // Apply font
+        terminal.font = theme.font
+
+        // Apply ANSI color palette
+        // Convert NSColor array to SwiftTerm Color array
+        let swiftTermColors = theme.ansiColors.map { nsColor -> SwiftTerm.Color in
+            // Convert NSColor to sRGB color space for consistent values
+            let color = nsColor.usingColorSpace(.sRGB) ?? nsColor
+            // SwiftTerm Color uses UInt16 for RGB (0-65535 range)
+            let red = UInt16(color.redComponent * 65535)
+            let green = UInt16(color.greenComponent * 65535)
+            let blue = UInt16(color.blueComponent * 65535)
+            return SwiftTerm.Color(red: red, green: green, blue: blue)
+        }
+        terminal.installColors(swiftTermColors)
+
+        // Force redraw
+        terminal.needsDisplay = true
     }
 
     /// Start the Claude Code process in the terminal
@@ -194,6 +238,7 @@ struct ClaudeTerminalView: NSViewRepresentable {
     class Coordinator: NSObject, LocalProcessTerminalViewDelegate {
         var onTerminated: ((Int32?) -> Void)?
         var onTitleChanged: ((String) -> Void)?
+        var currentTheme: Theme?
 
         init(onTerminated: ((Int32?) -> Void)?, onTitleChanged: ((String) -> Void)?) {
             self.onTerminated = onTerminated
@@ -235,6 +280,12 @@ protocol TerminalProvider {
 // MARK: - Preview
 
 #Preview {
-    ClaudeTerminalView()
-        .frame(width: 600, height: 400)
+    struct PreviewWrapper: View {
+        @State var terminalRef: AnyObject?
+        var body: some View {
+            ClaudeTerminalView(terminalRef: $terminalRef)
+                .frame(width: 600, height: 400)
+        }
+    }
+    return PreviewWrapper()
 }

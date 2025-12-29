@@ -4,6 +4,7 @@ import AppKit
 /// A floating panel window that stays visible alongside Xcode
 class FloatingPanel: NSPanel {
     private var hostingView: NSHostingView<MainContentView>?
+    private var themeObserver: NSObjectProtocol?
 
     init() {
         super.init(
@@ -21,6 +22,14 @@ class FloatingPanel: NSPanel {
 
         configure()
         setupContent()
+        setupThemeObserver()
+        applyInitialTheme()
+    }
+
+    deinit {
+        if let observer = themeObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     private func configure() {
@@ -32,18 +41,10 @@ class FloatingPanel: NSPanel {
             .transient
         ]
 
-        // Xcode-like dark title bar appearance
-        appearance = NSAppearance(named: .darkAqua)
+        // Make title bar transparent to blend with content (like Xcode)
+        titlebarAppearsTransparent = true
+        titleVisibility = .hidden  // Hide title text for cleaner look
         isOpaque = false
-        backgroundColor = NSColor(red: 0.15, green: 0.15, blue: 0.15, alpha: 1.0)
-        titlebarAppearsTransparent = false
-        titleVisibility = .visible
-
-        // Style the title bar like Xcode
-        if let titlebarView = standardWindowButton(.closeButton)?.superview?.superview {
-            titlebarView.wantsLayer = true
-            titlebarView.layer?.backgroundColor = NSColor(red: 0.18, green: 0.18, blue: 0.18, alpha: 1.0).cgColor
-        }
 
         // Window behavior
         isMovableByWindowBackground = true
@@ -64,7 +65,7 @@ class FloatingPanel: NSPanel {
             setFrameOrigin(newOrigin)
         }
 
-        // Title for accessibility
+        // Title for accessibility (still set even though hidden)
         title = "Claude Code"
     }
 
@@ -74,6 +75,52 @@ class FloatingPanel: NSPanel {
         hostingView?.translatesAutoresizingMaskIntoConstraints = false
 
         self.contentView = hostingView
+    }
+
+    private func setupThemeObserver() {
+        themeObserver = NotificationCenter.default.addObserver(
+            forName: .themeDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            if let theme = notification.userInfo?["theme"] as? Theme {
+                self?.applyTheme(theme)
+            }
+        }
+    }
+
+    private func applyInitialTheme() {
+        // Read Xcode's IDEAppearance to determine initial theme
+        let isDark = isXcodeDarkMode()
+        let theme = isDark ? Theme.xcodeDefaultDark : Theme.xcodeDefaultLight
+        applyTheme(theme)
+    }
+
+    private func isXcodeDarkMode() -> Bool {
+        if let xcodeDefaults = UserDefaults(suiteName: "com.apple.dt.Xcode") {
+            let ideAppearance = xcodeDefaults.integer(forKey: "IDEAppearance")
+            switch ideAppearance {
+            case 1: return false  // Light
+            case 2: return true   // Dark
+            default: break        // System - fall through
+            }
+        }
+        // Fall back to system appearance
+        let appearance = NSApp.effectiveAppearance
+        let match = appearance.bestMatch(from: [.darkAqua, .aqua])
+        return match == .darkAqua
+    }
+
+    private func applyTheme(_ theme: Theme) {
+        print("[FloatingPanel] Applying theme: \(theme.name), isDark: \(theme.isDark)")
+
+        // Update window appearance
+        appearance = NSAppearance(named: theme.isDark ? .darkAqua : .aqua)
+        backgroundColor = theme.backgroundColor
+
+        // Force redraw
+        invalidateShadow()
+        displayIfNeeded()
     }
 
     func show() {
