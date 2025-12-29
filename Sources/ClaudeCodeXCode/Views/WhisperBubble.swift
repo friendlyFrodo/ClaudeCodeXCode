@@ -123,29 +123,242 @@ struct WhisperActionButton: View {
     }
 }
 
+// MARK: - Dismissal Animation Types
+
+enum WhisperDismissalType {
+    case none
+    case apply      // Green checkmark flash + fade
+    case expand     // Float up toward terminal
+    case dismiss    // Scale-out poof
+}
+
 // MARK: - Container for Animation
 
 /// Container view that handles whisper appearance/disappearance animation
 struct WhisperContainer: View {
     let whisper: Whisper?
-    let onApply: () -> Void
+    let onApply: () -> Bool  // Returns true if patch succeeded
     let onExpand: () -> Void
     let onDismiss: () -> Void
 
+    // Animation state
+    @State private var dismissalType: WhisperDismissalType = .none
+    @State private var showWorking = false  // Spinner while applying
+    @State private var showCheckmark = false  // Success indicator
+    @State private var showError = false  // Failure indicator
+    @State private var animationProgress: CGFloat = 0  // 0 = visible, 1 = gone
+    @State private var cachedWhisper: Whisper?  // Keep whisper during animation
+    @State private var geniePhase: CGFloat = 0  // For genie effect staging
+
     var body: some View {
-        VStack {
-            if let whisper = whisper {
+        ZStack(alignment: .top) {
+            // Invisible spacer to maintain consistent height
+            Color.clear
+
+            if let displayWhisper = cachedWhisper ?? whisper {
                 WhisperBubble(
-                    whisper: whisper,
-                    onApply: onApply,
-                    onExpand: onExpand,
-                    onDismiss: onDismiss
+                    whisper: displayWhisper,
+                    onApply: { handleApply() },
+                    onExpand: { handleExpand() },
+                    onDismiss: { handleDismiss() }
                 )
                 .padding(.horizontal, 12)
-                .padding(.bottom, 8)
+                .padding(.top, 8)
+                .overlay(checkmarkOverlay)
+                .opacity(opacityForAnimation)
+                .scaleEffect(x: scaleXForAnimation, y: scaleYForAnimation, anchor: .top)
+                .offset(y: offsetForAnimation)
             }
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: whisper?.id)
+        .onChange(of: whisper?.id) { oldValue, newValue in
+            // New whisper appeared - reset animation state
+            if newValue != nil && oldValue == nil {
+                resetState()
+            }
+        }
+    }
+
+    // MARK: - Animation Modifiers
+
+    private var opacityForAnimation: Double {
+        switch dismissalType {
+        case .apply, .dismiss:
+            return 1.0 - animationProgress
+        case .expand:
+            // Genie: fade out more aggressively at the end
+            let easedProgress = animationProgress * animationProgress
+            return 1.0 - easedProgress
+        case .none:
+            return 1.0
+        }
+    }
+
+    private var scaleXForAnimation: CGFloat {
+        switch dismissalType {
+        case .dismiss:
+            return 1.0 - (animationProgress * 0.7)  // Scale to 0.3
+        case .apply:
+            return 1.0 - (animationProgress * 0.1)  // Slight shrink
+        case .expand:
+            // Genie: pinch horizontally more than vertically
+            let easedProgress = animationProgress * animationProgress
+            return 1.0 - (easedProgress * 0.95)  // Pinch to 5% width
+        case .none:
+            return 1.0
+        }
+    }
+
+    private var scaleYForAnimation: CGFloat {
+        switch dismissalType {
+        case .dismiss:
+            return 1.0 - (animationProgress * 0.7)  // Scale to 0.3
+        case .apply:
+            return 1.0 - (animationProgress * 0.1)  // Slight shrink
+        case .expand:
+            // Genie: stretch vertically slightly before compressing
+            if animationProgress < 0.3 {
+                // Initial stretch
+                return 1.0 + (animationProgress * 0.15)
+            } else {
+                // Then compress
+                let compressProgress = (animationProgress - 0.3) / 0.7
+                return 1.05 - (compressProgress * 0.85)  // From 1.05 to 0.2
+            }
+        case .none:
+            return 1.0
+        }
+    }
+
+    private var offsetForAnimation: CGFloat {
+        switch dismissalType {
+        case .expand:
+            // Genie: accelerate upward (ease-in curve)
+            let easedProgress = animationProgress * animationProgress * animationProgress
+            return -easedProgress * 120  // Move up 120pts with acceleration
+        default:
+            return 0
+        }
+    }
+
+    // MARK: - Status Overlays (for Apply)
+
+    @ViewBuilder
+    private var checkmarkOverlay: some View {
+        ZStack {
+            // Working spinner
+            if showWorking {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.blue.opacity(0.15))
+
+                ProgressView()
+                    .scaleEffect(1.5)
+                    .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+            }
+
+            // Success checkmark
+            if showCheckmark {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.green.opacity(0.2))
+
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 44))
+                    .foregroundColor(.green)
+            }
+
+            // Error indicator
+            if showError {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.red.opacity(0.15))
+
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 44))
+                    .foregroundColor(.red)
+            }
+        }
+        .transition(.opacity)
+    }
+
+    // MARK: - Action Handlers
+
+    private func handleApply() {
+        guard dismissalType == .none else { return }
+        dismissalType = .apply
+        cachedWhisper = whisper
+
+        // Show working spinner
+        withAnimation(.easeIn(duration: 0.15)) {
+            showWorking = true
+        }
+
+        // Apply patch after brief delay (let spinner appear)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            let success = onApply()
+
+            // Hide spinner, show result
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+                showWorking = false
+                if success {
+                    showCheckmark = true
+                } else {
+                    showError = true
+                }
+            }
+
+            // Fade out after showing result
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    showCheckmark = false
+                    showError = false
+                    animationProgress = 1.0
+                }
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    resetState()
+                }
+            }
+        }
+    }
+
+    private func handleExpand() {
+        guard dismissalType == .none else { return }
+        dismissalType = .expand
+        cachedWhisper = whisper
+
+        // Genie effect - ease in for acceleration feel
+        withAnimation(.easeIn(duration: 0.45)) {
+            animationProgress = 1.0
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            onExpand()
+            resetState()
+        }
+    }
+
+    private func handleDismiss() {
+        guard dismissalType == .none else { return }
+        dismissalType = .dismiss
+        cachedWhisper = whisper
+
+        // Poof - scale down and fade
+        withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
+            animationProgress = 1.0
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            onDismiss()
+            resetState()
+        }
+    }
+
+    private func resetState() {
+        dismissalType = .none
+        animationProgress = 0
+        showWorking = false
+        showCheckmark = false
+        showError = false
+        cachedWhisper = nil
+        geniePhase = 0
     }
 }
 

@@ -9,36 +9,43 @@ struct MainContentView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            VStack(spacing: 0) {
-                // Context bar showing files Claude is watching
-                ContextBar(
-                    contextTracker: whisperService.contextTracker,
-                    isProcessing: whisperService.isProcessing
-                )
+            ZStack(alignment: .bottom) {
+                // Main content layer
+                VStack(spacing: 0) {
+                    // Context bar showing files Claude is watching
+                    ContextBar(
+                        contextTracker: whisperService.contextTracker,
+                        isProcessing: whisperService.isProcessing
+                    )
 
-                Divider()
+                    Divider()
 
-                // Main terminal view
-                TerminalContainerView(
-                    workingDirectory: claudeService.workingDirectory,
-                    theme: themeReader.currentTheme,
-                    onProcessTerminated: { exitCode in
-                        claudeService.handleProcessTerminated(exitCode: exitCode)
-                    }
-                )
-                .frame(
-                    width: geometry.size.width,
-                    height: calculateTerminalHeight(totalHeight: geometry.size.height)
-                )
-                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: whisperService.currentWhisper?.id)
+                    // Main terminal view
+                    TerminalContainerView(
+                        workingDirectory: claudeService.workingDirectory,
+                        theme: themeReader.currentTheme,
+                        onProcessTerminated: { exitCode in
+                            claudeService.handleProcessTerminated(exitCode: exitCode)
+                        }
+                    )
+                    .frame(
+                        width: geometry.size.width,
+                        height: calculateTerminalHeight(totalHeight: geometry.size.height)
+                    )
 
-                // Whisper bubble (appears when there's a whisper)
+                    // Spacer to reserve whisper area
+                    Color.clear
+                        .frame(height: 100)
+                }
+
+                // Whisper layer (on top, can animate over terminal)
                 WhisperContainer(
                     whisper: whisperService.currentWhisper,
-                    onApply: { whisperService.applyWhisper() },
+                    onApply: { whisperService.applyWhisper() },  // Returns Bool
                     onExpand: { whisperService.expandWhisper() },
                     onDismiss: { whisperService.dismissWhisper() }
                 )
+                .frame(height: 100, alignment: .top)
             }
         }
         .onAppear {
@@ -67,11 +74,12 @@ struct MainContentView: View {
         }
     }
 
-    /// Calculate terminal height based on available space and whisper presence
+    /// Calculate terminal height based on available space
+    /// Always reserves space for whisper to prevent layout shifts
     private func calculateTerminalHeight(totalHeight: CGFloat) -> CGFloat {
         let contextBarHeight: CGFloat = 28
         let dividerHeight: CGFloat = 1
-        let whisperHeight: CGFloat = whisperService.currentWhisper != nil ? 100 : 0
+        let whisperHeight: CGFloat = 100  // Always reserve space
 
         let terminalHeight = totalHeight - contextBarHeight - dividerHeight - whisperHeight
         return max(terminalHeight, 200) // Minimum 200px for terminal

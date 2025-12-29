@@ -43,7 +43,6 @@ enum CodePatcher {
 
         // Apply patch
         let newContent = content.replacingOccurrences(of: patch.oldCode, with: patch.newCode)
-
         // Write file
         do {
             try newContent.write(toFile: filePath, atomically: true, encoding: .utf8)
@@ -54,7 +53,7 @@ enum CodePatcher {
             return .writeError(error)
         }
     }
-
+    
     /// Preview a patch (returns the result without applying)
     static func preview(_ patch: WhisperPatch) -> (canApply: Bool, context: String?) {
         guard let content = try? String(contentsOfFile: patch.filePath, encoding: .utf8) else {

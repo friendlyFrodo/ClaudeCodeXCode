@@ -180,10 +180,13 @@ final class WhisperService: ObservableObject {
     // MARK: - Whisper Actions
 
     /// Apply the current whisper's patch (⌘Y)
-    func applyWhisper() {
+    /// Returns true if patch was applied successfully
+    @discardableResult
+    func applyWhisper() -> Bool {
         guard let whisper = currentWhisper, let patch = whisper.patch else {
             print("[WhisperService] No patch to apply")
-            return
+            dismissWhisper()
+            return false
         }
 
         print("[WhisperService] Attempting to apply patch:")
@@ -196,7 +199,8 @@ final class WhisperService: ObservableObject {
         switch result {
         case .success:
             print("[WhisperService] Patch applied successfully")
-            // TODO: Play success sound or show brief confirmation
+            dismissWhisper()
+            return true
         case .fileNotFound:
             print("[WhisperService] Patch failed: file not found at '\(patch.filePath)'")
             print("[WhisperService] File exists: \(FileManager.default.fileExists(atPath: patch.filePath))")
@@ -207,6 +211,7 @@ final class WhisperService: ObservableObject {
         }
 
         dismissWhisper()
+        return false
     }
 
     /// Expand the current whisper (tell me more) (F2)
