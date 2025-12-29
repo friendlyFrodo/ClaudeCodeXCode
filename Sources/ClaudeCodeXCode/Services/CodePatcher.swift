@@ -28,13 +28,13 @@ enum CodePatcher {
         }
         
         let filePath = patch.filePath
-
+        
         // Read file
         guard let content = try? String(contentsOfFile: filePath, encoding: .utf8) else {
             print("[CodePatcher] File not found: \(filePath)")
             return .fileNotFound
         }
-
+        
         // Check if old code exists
         guard content.contains(patch.oldCode) else {
             print("[CodePatcher] Code not found in file: \(patch.oldCode.prefix(50))...")

@@ -39,7 +39,8 @@ final class WhisperService: ObservableObject {
     private var autoDismissTask: Task<Void, Never>?
 
     /// Debounce interval before requesting a whisper (seconds)
-    private let debounceInterval: TimeInterval = 2.5
+    /// Very short since we only trigger on file saves now
+    private let debounceInterval: TimeInterval = 0.1
 
     /// Auto-dismiss whispers after this many seconds
     private let autoDismissInterval: TimeInterval = 15.0
@@ -290,7 +291,8 @@ final class WhisperRateLimiter {
     private var lastWhisperTime: Date?
 
     /// Minimum interval between whispers (seconds)
-    var minimumInterval: TimeInterval = 45
+    /// Set to 0 since whispers are now triggered on manual file saves
+    var minimumInterval: TimeInterval = 0
 
     /// Check if enough time has passed for a new whisper
     func canWhisper() -> Bool {
