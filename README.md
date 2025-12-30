@@ -118,6 +118,8 @@ Each whisper action has a distinct animation:
 
 These communicate state without requiring text or dialogs.
 
+[Tell me more](https://github.com/user-attachments/assets/0d51c63a-827d-44fb-ae95-8d219c0f59ca)
+
 #### F1 — Apply Fix
 https://github.com/user-attachments/assets/placeholder-apply-video
 
