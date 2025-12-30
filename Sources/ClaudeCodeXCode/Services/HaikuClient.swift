@@ -4,7 +4,7 @@ import Foundation
 actor HaikuClient {
     private let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
     private let model = "claude-haiku-4-5"
-    private let maxTokens = 512
+    private let maxTokens = 1500
 
     /// API key loaded from Claude CLI config or environment
     private var apiKey: String?
