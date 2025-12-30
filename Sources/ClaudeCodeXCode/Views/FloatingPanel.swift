@@ -136,6 +136,54 @@ class FloatingPanel: NSPanel {
         }
     }
 
+    /// Snap panel to the right edge of Xcode's window
+    /// Note: CGWindowList returns flipped coordinates (origin at top-left), NSWindow uses bottom-left
+    func snapToXcode(xcodeFrame: NSRect) {
+        guard let screen = NSScreen.main else { return }
+
+        // Convert from CGWindowList coordinates (top-left origin) to NSWindow coordinates (bottom-left origin)
+        let screenHeight = screen.frame.height
+        let flippedY = screenHeight - xcodeFrame.origin.y - xcodeFrame.height
+
+        // Match Xcode's height (with min constraint)
+        let newHeight = max(xcodeFrame.height, minSize.height)
+
+        // Position panel directly at Xcode's right edge (0 gap - true snap)
+        var newX = xcodeFrame.maxX
+        let newY = flippedY  // Align top edges
+
+        // Clamp to screen bounds - if panel would go off-screen, position at screen edge
+        let screenFrame = screen.visibleFrame
+        if newX + frame.width > screenFrame.maxX {
+            // Panel would go off right edge - position at right edge of screen
+            newX = screenFrame.maxX - frame.width
+        }
+
+        // Clamp vertical position
+        var finalY = newY
+        if finalY < screenFrame.minY {
+            finalY = screenFrame.minY
+        }
+        if finalY + newHeight > screenFrame.maxY {
+            finalY = screenFrame.maxY - newHeight
+        }
+
+        // Update frame with new size and position
+        setFrame(NSRect(x: newX, y: finalY, width: frame.width, height: newHeight), display: true)
+    }
+
+    /// Reset panel position to default (right side of screen)
+    func resetToDefaultPosition() {
+        if let screen = NSScreen.main {
+            let screenFrame = screen.visibleFrame
+            let newOrigin = NSPoint(
+                x: screenFrame.maxX - frame.width - 20,
+                y: screenFrame.midY - frame.height / 2
+            )
+            setFrameOrigin(newOrigin)
+        }
+    }
+
     // Allow the panel to become key for text input
     override var canBecomeKey: Bool {
         return true

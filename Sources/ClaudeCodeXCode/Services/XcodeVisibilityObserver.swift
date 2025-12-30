@@ -8,8 +8,14 @@ final class XcodeVisibilityObserver {
     /// Callback when Xcode visibility changes
     var onVisibilityChanged: ((Bool) -> Void)?
 
+    /// Callback when Xcode window frame changes
+    var onFrameChanged: ((NSRect) -> Void)?
+
     /// Current visibility state
     private(set) var isXcodeVisible: Bool = false
+
+    /// Current Xcode window frame (nil if not visible)
+    private(set) var xcodeWindowFrame: NSRect?
 
     private var workspaceObservers: [NSObjectProtocol] = []
     private var pollTimer: Timer?
@@ -26,7 +32,12 @@ final class XcodeVisibilityObserver {
     /// Start observing Xcode visibility
     func start() {
         // Initial check
-        isXcodeVisible = checkXcodeHasVisibleWindows()
+        let result = checkXcodeHasVisibleWindows()
+        isXcodeVisible = result.visible
+        xcodeWindowFrame = result.frame
+        if let frame = result.frame {
+            onFrameChanged?(frame)
+        }
 
         // Observe app activation/deactivation
         let activateObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -66,8 +77,9 @@ final class XcodeVisibilityObserver {
         }
         workspaceObservers.append(unhideObserver)
 
-        // Poll periodically to catch minimize/restore (not covered by notifications)
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        // Poll periodically to catch minimize/restore and track window position
+        // Using 50ms interval for smooth window tracking (~20fps)
+        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             self?.checkVisibilityChange()
         }
 
@@ -124,9 +136,21 @@ final class XcodeVisibilityObserver {
     // MARK: - Visibility Check
 
     private func checkVisibilityChange() {
-        let visible = checkXcodeHasVisibleWindows()
-        if visible != isXcodeVisible {
-            updateVisibility(visible)
+        let result = checkXcodeHasVisibleWindows()
+
+        // Check visibility change
+        if result.visible != isXcodeVisible {
+            updateVisibility(result.visible)
+        }
+
+        // Check frame change (only notify if visible and frame changed significantly)
+        if let newFrame = result.frame {
+            if xcodeWindowFrame == nil || !NSEqualRects(newFrame, xcodeWindowFrame!) {
+                xcodeWindowFrame = newFrame
+                onFrameChanged?(newFrame)
+            }
+        } else {
+            xcodeWindowFrame = nil
         }
     }
 
@@ -136,21 +160,24 @@ final class XcodeVisibilityObserver {
         onVisibilityChanged?(visible)
     }
 
-    /// Check if Xcode has any visible (non-minimized) windows
-    private func checkXcodeHasVisibleWindows() -> Bool {
+    /// Check if Xcode has any visible (non-minimized) windows and get the main window frame
+    private func checkXcodeHasVisibleWindows() -> (visible: Bool, frame: NSRect?) {
         // First check if Xcode is running
         let xcodeApps = NSRunningApplication.runningApplications(withBundleIdentifier: xcodeBundleID)
         guard let xcode = xcodeApps.first, !xcode.isTerminated else {
-            return false
+            return (false, nil)
         }
 
         // Check if Xcode is hidden
         if xcode.isHidden {
-            return false
+            return (false, nil)
         }
 
         // Get all windows and check if Xcode has visible ones
         let windowList = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[CFString: Any]] ?? []
+
+        var largestFrame: NSRect?
+        var largestArea: CGFloat = 0
 
         for window in windowList {
             guard let ownerPID = window[kCGWindowOwnerPID] as? pid_t,
@@ -158,11 +185,24 @@ final class XcodeVisibilityObserver {
 
             // Check if this is a regular window (not a menu or other UI element)
             if let layer = window[kCGWindowLayer] as? Int, layer == 0 {
-                // Layer 0 = normal window, and it's on screen = visible
-                return true
+                // Extract window bounds
+                if let boundsDict = window[kCGWindowBounds] as? [String: CGFloat],
+                   let x = boundsDict["X"],
+                   let y = boundsDict["Y"],
+                   let width = boundsDict["Width"],
+                   let height = boundsDict["Height"] {
+                    let frame = NSRect(x: x, y: y, width: width, height: height)
+                    let area = width * height
+
+                    // Track the largest window (likely the main editor window)
+                    if area > largestArea {
+                        largestArea = area
+                        largestFrame = frame
+                    }
+                }
             }
         }
 
-        return false
+        return (largestFrame != nil, largestFrame)
     }
 }

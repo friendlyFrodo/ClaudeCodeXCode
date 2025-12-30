@@ -17,6 +17,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var floatingPanel: FloatingPanel?
     var settingsWindow: NSWindow?
     private var xcodeVisibilityObserver: XcodeVisibilityObserver?
+    private var statusItem: NSStatusItem?
 
     /// Track if panel was manually hidden (vs auto-hidden due to Xcode)
     private var panelManuallyHidden = false
@@ -31,6 +32,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Create and show the floating panel
         floatingPanel = FloatingPanel()
         floatingPanel?.show()
+
+        // Set up menu bar icon
+        setupStatusBar()
 
         // Set up Xcode visibility observer to show/hide panel with Xcode
         setupXcodeVisibilityObserver()
@@ -52,7 +56,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 panel.miniaturize(nil)
             }
         }
+
+        // Snap panel to Xcode when its window frame changes
+        xcodeVisibilityObserver?.onFrameChanged = { [weak self] xcodeFrame in
+            guard let panel = self?.floatingPanel, !self!.panelManuallyHidden else { return }
+            panel.snapToXcode(xcodeFrame: xcodeFrame)
+        }
+
         xcodeVisibilityObserver?.start()
+    }
+
+    private func setupStatusBar() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let button = statusItem?.button {
+            button.image = NSImage(systemSymbolName: "brain.head.profile", accessibilityDescription: "Claude Code")
+            button.action = #selector(togglePanel)
+            button.target = self
+        }
+    }
+
+    @objc private func togglePanel() {
+        guard let panel = floatingPanel else { return }
+        if panel.isVisible {
+            panel.orderOut(nil)
+            panelManuallyHidden = true
+        } else {
+            panel.makeKeyAndOrderFront(nil)
+            panelManuallyHidden = false
+        }
     }
 
     private func setupMenu() {

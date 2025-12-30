@@ -35,7 +35,7 @@ struct MainContentView: View {
 
                     // Spacer to reserve whisper area
                     Color.clear
-                        .frame(height: 100)
+                        .frame(height: 200)
                 }
 
                 // Whisper layer (on top, can animate over terminal)
@@ -45,7 +45,7 @@ struct MainContentView: View {
                     onExpand: { whisperService.expandWhisper() },
                     onDismiss: { whisperService.dismissWhisper() }
                 )
-                .frame(height: 100, alignment: .top)
+                .frame(height: 200, alignment: .top)
             }
         }
         .onAppear {
@@ -79,7 +79,7 @@ struct MainContentView: View {
     private func calculateTerminalHeight(totalHeight: CGFloat) -> CGFloat {
         let contextBarHeight: CGFloat = 28
         let dividerHeight: CGFloat = 1
-        let whisperHeight: CGFloat = 100  // Always reserve space
+        let whisperHeight: CGFloat = 200  // Always reserve space
 
         let terminalHeight = totalHeight - contextBarHeight - dividerHeight - whisperHeight
         return max(terminalHeight, 200) // Minimum 200px for terminal
