@@ -41,6 +41,7 @@ struct MainContentView: View {
                 // Whisper layer (on top, can animate over terminal)
                 WhisperContainer(
                     whisper: whisperService.currentWhisper,
+                    showAllGood: whisperService.showAllGood,
                     onApply: { whisperService.applyWhisper() },  // Returns Bool
                     onExpand: { whisperService.expandWhisper() },
                     onDismiss: { whisperService.dismissWhisper() }

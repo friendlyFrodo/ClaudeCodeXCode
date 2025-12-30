@@ -26,6 +26,9 @@ final class WhisperService: ObservableObject {
     /// Whether the service is currently processing
     @Published private(set) var isProcessing: Bool = false
 
+    /// Transient "all looks good" message (shows briefly when no whisper needed)
+    @Published private(set) var showAllGood: Bool = false
+
     // MARK: - Dependencies
 
     let contextTracker: ContextTracker
@@ -37,6 +40,7 @@ final class WhisperService: ObservableObject {
 
     private var debounceTask: Task<Void, Never>?
     private var autoDismissTask: Task<Void, Never>?
+    private var allGoodDismissTask: Task<Void, Never>?
 
     /// Debounce interval before requesting a whisper (seconds)
     /// Very short since we only trigger on file saves now
@@ -77,6 +81,7 @@ final class WhisperService: ObservableObject {
         xcodeWatcher.stop()
         debounceTask?.cancel()
         autoDismissTask?.cancel()
+        allGoodDismissTask?.cancel()
         print("[WhisperService] Stopped")
     }
 
@@ -134,6 +139,7 @@ final class WhisperService: ObservableObject {
                 rateLimiter.didWhisper()
             } else {
                 print("[WhisperService] Haiku returned null whisper (nothing to say)")
+                showAllGoodMessage()
             }
         } catch {
             print("[WhisperService] ERROR from Haiku: \(error)")
@@ -142,9 +148,32 @@ final class WhisperService: ObservableObject {
 
     // MARK: - Whisper Display
 
+    private func showAllGoodMessage() {
+        // Cancel any pending "all good" dismiss
+        allGoodDismissTask?.cancel()
+
+        // Show "all looks good" briefly
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showAllGood = true
+        }
+
+        // Auto-hide after 3 seconds
+        allGoodDismissTask = Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)  // 3 seconds
+
+            guard !Task.isCancelled else { return }
+
+            withAnimation(.easeOut(duration: 0.3)) {
+                self.showAllGood = false
+            }
+        }
+    }
+
     private func showWhisper(_ whisper: Whisper) {
-        // Cancel any pending auto-dismiss
+        // Cancel any pending auto-dismiss and hide "all good" if showing
         autoDismissTask?.cancel()
+        allGoodDismissTask?.cancel()
+        showAllGood = false
 
         // Record when whisper is shown
         whisperShownAt = Date()

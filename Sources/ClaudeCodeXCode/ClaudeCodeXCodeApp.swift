@@ -31,6 +31,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Create and show the floating panel
         floatingPanel = FloatingPanel()
+
+        // Set initial window level based on whether Xcode is frontmost
+        if let frontApp = NSWorkspace.shared.frontmostApplication,
+           frontApp.bundleIdentifier == "com.apple.dt.Xcode" {
+            floatingPanel?.level = .floating
+        } else {
+            floatingPanel?.level = .normal
+        }
+
         floatingPanel?.show()
 
         // Set up menu bar icon
@@ -45,6 +54,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupXcodeVisibilityObserver() {
         xcodeVisibilityObserver = XcodeVisibilityObserver()
+
+        // Handle Xcode minimize/hide - minimize our panel too (genie effect)
         xcodeVisibilityObserver?.onVisibilityChanged = { [weak self] isVisible in
             guard let self = self, let panel = self.floatingPanel, !self.panelManuallyHidden else { return }
 
@@ -54,6 +65,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             } else {
                 // Minimize to dock with animation (genie/scale effect)
                 panel.miniaturize(nil)
+            }
+        }
+
+        // Handle frontmost app changes - adjust window level
+        xcodeVisibilityObserver?.onFrontmostChanged = { [weak self] isXcodeFrontmost in
+            guard let self = self, let panel = self.floatingPanel, !self.panelManuallyHidden else { return }
+
+            if isXcodeFrontmost {
+                // Xcode is frontmost - panel floats above everything
+                panel.level = .floating
+                panel.orderFront(nil)
+            } else {
+                // Another app is frontmost - panel goes behind it
+                panel.level = .normal
+                panel.orderBack(nil)
             }
         }
 
@@ -81,6 +107,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             panel.orderOut(nil)
             panelManuallyHidden = true
         } else {
+            // Restore panel with appropriate window level
+            if xcodeVisibilityObserver?.isXcodeFrontmost == true {
+                panel.level = .floating
+            } else {
+                panel.level = .normal
+            }
             panel.makeKeyAndOrderFront(nil)
             panelManuallyHidden = false
         }

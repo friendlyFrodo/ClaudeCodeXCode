@@ -5,14 +5,21 @@ import CoreGraphics
 /// Observes Xcode's visibility state and notifies when it changes
 /// Used to show/hide the companion panel when Xcode is minimized/restored
 final class XcodeVisibilityObserver {
-    /// Callback when Xcode visibility changes
+    /// Callback when Xcode visibility changes (minimized/hidden vs visible)
     var onVisibilityChanged: ((Bool) -> Void)?
 
     /// Callback when Xcode window frame changes
     var onFrameChanged: ((NSRect) -> Void)?
 
+    /// Callback when Xcode becomes/leaves frontmost status
+    /// Bool is true when Xcode is frontmost, false when another app is frontmost
+    var onFrontmostChanged: ((Bool) -> Void)?
+
     /// Current visibility state
     private(set) var isXcodeVisible: Bool = false
+
+    /// Whether Xcode is currently the frontmost app
+    private(set) var isXcodeFrontmost: Bool = false
 
     /// Current Xcode window frame (nil if not visible)
     private(set) var xcodeWindowFrame: NSRect?
@@ -22,6 +29,9 @@ final class XcodeVisibilityObserver {
 
     /// Xcode's bundle identifier
     private let xcodeBundleID = "com.apple.dt.Xcode"
+
+    /// Our own bundle identifier (to ignore our own activation)
+    private let selfBundleID = Bundle.main.bundleIdentifier ?? "com.friendlyFrodo.ClaudeCodeXCode"
 
     init() {}
 
@@ -37,6 +47,11 @@ final class XcodeVisibilityObserver {
         xcodeWindowFrame = result.frame
         if let frame = result.frame {
             onFrameChanged?(frame)
+        }
+
+        // Check initial frontmost state
+        if let frontApp = NSWorkspace.shared.frontmostApplication {
+            isXcodeFrontmost = frontApp.bundleIdentifier == xcodeBundleID
         }
 
         // Observe app activation/deactivation
@@ -102,11 +117,28 @@ final class XcodeVisibilityObserver {
     // MARK: - Notification Handlers
 
     private func handleAppActivation(_ notification: Notification) {
-        guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
-              app.bundleIdentifier == xcodeBundleID else { return }
+        guard let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
 
-        // Xcode activated - check if it has visible windows
-        checkVisibilityChange()
+        let activatedBundleID = app.bundleIdentifier
+
+        // Ignore our own app activation (clicking on our panel shouldn't change layering)
+        if activatedBundleID == selfBundleID {
+            return
+        }
+
+        // Track frontmost state changes
+        let wasXcodeFrontmost = isXcodeFrontmost
+        isXcodeFrontmost = (activatedBundleID == xcodeBundleID)
+
+        if isXcodeFrontmost != wasXcodeFrontmost {
+            print("[XcodeVisibilityObserver] Frontmost changed: Xcode=\(isXcodeFrontmost), activated=\(activatedBundleID ?? "unknown")")
+            onFrontmostChanged?(isXcodeFrontmost)
+        }
+
+        // If Xcode activated, check visibility
+        if activatedBundleID == xcodeBundleID {
+            checkVisibilityChange()
+        }
     }
 
     private func handleAppDeactivation(_ notification: Notification) {

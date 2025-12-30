@@ -137,6 +137,7 @@ enum WhisperDismissalType {
 /// Container view that handles whisper appearance/disappearance animation
 struct WhisperContainer: View {
     let whisper: Whisper?
+    let showAllGood: Bool
     let onApply: () -> Bool  // Returns true if patch succeeded
     let onExpand: () -> Void
     let onDismiss: () -> Void
@@ -168,8 +169,20 @@ struct WhisperContainer: View {
                 .opacity(opacityForAnimation)
                 .scaleEffect(x: scaleXForAnimation, y: scaleYForAnimation, anchor: .top)
                 .offset(y: offsetForAnimation)
+            } else if showAllGood {
+                // "All looks good" message (shows briefly after check)
+                WhisperAllGoodView()
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                    .transition(.opacity)
+            } else {
+                // Hint when no whisper is showing
+                WhisperHintView()
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
             }
         }
+        .animation(.easeInOut(duration: 0.3), value: showAllGood)
         .onChange(of: whisper?.id) { oldValue, newValue in
             // New whisper appeared - reset animation state
             if newValue != nil && oldValue == nil {
@@ -362,6 +375,83 @@ struct WhisperContainer: View {
     }
 }
 
+// MARK: - Hint View
+
+/// Shows a hint when no whisper is active
+struct WhisperHintView: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text("💭")
+                    .font(.system(size: 14))
+                    .opacity(0.5)
+
+                Text("Save a file in Xcode")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+
+                Text("⌘S")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(Color.secondary.opacity(0.15))
+                    )
+                    .foregroundColor(.secondary)
+
+                Text("to get whispers")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+
+                Spacer()
+            }
+
+            Text("Claude reviews your changes and may offer suggestions")
+                .font(.system(size: 11))
+                .foregroundColor(.secondary.opacity(0.7))
+                .padding(.leading, 30)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(NSColor.controlBackgroundColor).opacity(0.5))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.secondary.opacity(0.15), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - All Good View
+
+/// Shows briefly when Claude checked but had no suggestions
+struct WhisperAllGoodView: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("✓")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.green)
+
+            Text("All looks good!")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.primary.opacity(0.8))
+
+            Spacer()
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.green.opacity(0.1))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.green.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
 // MARK: - Preview
 
 #Preview("With Patch") {
@@ -420,6 +510,26 @@ struct WhisperContainer: View {
             onDismiss: { print("Dismiss") }
         )
         .padding()
+    }
+    .frame(width: 450, height: 200)
+    .background(Color(NSColor.windowBackgroundColor))
+}
+
+#Preview("Hint View") {
+    VStack {
+        Spacer()
+        WhisperHintView()
+            .padding()
+    }
+    .frame(width: 450, height: 200)
+    .background(Color(NSColor.windowBackgroundColor))
+}
+
+#Preview("All Good View") {
+    VStack {
+        Spacer()
+        WhisperAllGoodView()
+            .padding()
     }
     .frame(width: 450, height: 200)
     .background(Color(NSColor.windowBackgroundColor))

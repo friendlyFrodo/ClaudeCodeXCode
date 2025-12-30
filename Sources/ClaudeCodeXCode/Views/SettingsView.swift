@@ -209,6 +209,7 @@ enum KeychainHelper {
 
         return key
     }
+    
 
     static func deleteApiKey() {
         let query: [String: Any] = [
