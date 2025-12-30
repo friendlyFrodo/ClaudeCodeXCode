@@ -2,9 +2,7 @@
 
 A native macOS companion for Xcode that brings Claude Code's terminal power into a floating panel—with an experimental "Whisper" system that lets AI pair-program without breaking your flow.
 
-https://github.com/user-attachments/assets/placeholder-hero-video
-
-> **To see the demo:** After pushing, drag `media/whisper-apply-fix.mp4` into a GitHub issue comment, copy the generated URL, and replace the placeholder above.
+[Apply Fix](https://github.com/user-attachments/assets/a10edbd7-a236-4c21-ae81-33cc1747a983)
 
 ## The Problem
 
