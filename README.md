@@ -67,7 +67,7 @@ When there's nothing to say, the UI briefly shows "All looks good" and fades. No
 | File change detection | FSEvents | Native, efficient filesystem watching |
 | Live buffer reading | Accessibility API | Get unsaved content from Xcode's editor |
 | Theme sync | Parse `.xccolortheme` plist | Match Xcode's exact colors/fonts |
-| Patch application | Source Editor Extension | Apply changes without file save flicker |
+| Patch application | Accessibility API | Modify Xcode's editor buffer directly via AXUIElement |
 | Panel behavior | NSPanel + window level tricks | Float above Xcode but behind other apps |
 
 ### The Whisper Pipeline
@@ -107,7 +107,7 @@ This required observing `NSWorkspace` notifications and dynamically adjusting `N
 
 ### Patch Application
 
-Applying whisper suggestions presented a challenge: writing to disk triggers Xcode to reload, causing UI flicker. The solution uses an Xcode Source Editor Extension that applies patches directly to `XCSourceTextBuffer`—the in-memory representation of the file.
+Applying whisper suggestions uses macOS Accessibility APIs to modify Xcode's editor buffer directly. The patcher finds the focused text area via `AXUIElement`, locates the target code, sets a selection range, and replaces the selected text—all without touching the filesystem. This avoids the reload flicker that file writes would cause. Falls back to disk writes if Accessibility permissions aren't available.
 
 ### Animation System
 
@@ -124,10 +124,11 @@ These communicate state without requiring text or dialogs.
 
 This is an exploration, not a finished product. Some things I'm still thinking about:
 
+- **Latency bottleneck**: The biggest delay isn't the model—it's Xcode's save-to-disk cycle before we can detect the change. A true Xcode Source Editor Extension could hook directly into buffer changes, eliminating this entirely. Worth the sandboxing tradeoffs?
 - **Suggestion quality vs. latency**: Haiku is fast but sometimes shallow. Sonnet is deeper but adds noticeable delay. Is there a hybrid approach?
 - **Context window management**: Currently sends 200 lines + recent diff. For large files, what's the right truncation strategy?
 - **Multi-file awareness**: Whispers only see the current file. How could cross-file context work without overwhelming the model?
-- **Undo integration**: Patches work, but there's no native undo. Should the extension maintain its own undo stack?
+- **Undo integration**: Patches work, but there's no native undo. Should the app maintain its own undo stack?
 
 ---
 
@@ -157,8 +158,8 @@ Requires:
 
 ## Why I Built This
 
-I spend most of my day in Xcode. Claude Code is powerful, but switching to Terminal interrupts flow. I wanted to explore what a *native* integration could feel like—one that treats AI assistance as ambient rather than modal.
+I use Claude Code daily—full terminal, full control. But some colleagues find that mode too much like *delegation*. They want a partner, not an agent they hand tasks off to. They want to stay in their editor, stay in flow, and have AI chime in when it notices something.
 
-The Whisper concept emerged from observing how I actually want help: not constant commentary, but a thoughtful colleague who speaks up when they notice something worth mentioning.
+This tool is for them. It's an experiment in a different interaction model: AI as ambient pair programmer rather than autonomous agent. The Whisper concept captures this—brief observations from a colleague glancing at your screen, not a code review you requested.
 
-This is an experiment in interaction design for agentic tools. The patterns here—intentional triggers, non-blocking UI, keyboard-first actions, state-communicating animations—feel transferable to other contexts where AI works alongside humans.
+The patterns here—intentional triggers, non-blocking UI, keyboard-first actions, state-communicating animations—feel transferable to other contexts where humans and AI work alongside each other rather than in handoff mode.
