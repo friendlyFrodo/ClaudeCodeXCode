@@ -120,17 +120,6 @@ These communicate state without requiring text or dialogs.
 
 [Tell me more](https://github.com/user-attachments/assets/0d51c63a-827d-44fb-ae95-8d219c0f59ca)
 
-#### F1 — Apply Fix
-https://github.com/user-attachments/assets/placeholder-apply-video
-
-#### F2 — Tell Me More
-https://github.com/user-attachments/assets/placeholder-expand-video
-
-#### Casual Observation (no patch)
-https://github.com/user-attachments/assets/placeholder-observation-video
-
-> Replace placeholders by uploading `media/*.mp4` files to a GitHub issue.
-
 ---
 
 ## Open Questions
